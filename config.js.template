@@ -1,0 +1,53 @@
+module.exports = {
+  /*
+   Port that application should listen
+  */
+  port: 8080,
+  
+  /*
+   Path to your mustache template which will be rendered to nginx upstream config
+  */
+  upstreamTemplate: '/cluster-controller/upstream.mustache',
+  
+  /*
+   Path to file which will hold status of your servers
+  */
+  statusPath: '/cluster-controller/status.json',
+  
+  /*
+   Path to your nginx config file
+  */
+  nginxConfigPath: '/etc/nginx/conf.d/upstream.conf',
+  
+  /*
+   Path that will be used to test if your servers are online
+  */
+  checkPath: '/',
+  
+  /*
+   Interval in ms how often servers are tested
+  */
+  checkInterval: 1000,
+  
+  /*
+   configuration for your servers
+  */
+  hosts: [
+    {
+      url: 'host1.example.com',
+      group: 'server-group-1',
+      protocol: 'http',
+      headers : {
+        'Host': 'host1.example.com'
+      }
+    },
+    {
+      url: 'host2.example.com',
+      group: 'server-group-2',
+      protocol: 'http',
+      headers: {
+        'Host': 'host1.example.com'
+      } 
+    }
+  ]
+};
