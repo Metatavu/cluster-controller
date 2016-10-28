@@ -13,6 +13,7 @@
       this.hosts = config.hosts;
       this.checkPath = config.checkPath;
       this.statusPath = config.statusPath;
+      this.interval = config.checkInterval || 1000;
       this.index = 0;
     }
     start() {
@@ -44,7 +45,7 @@
           }
         }
         this.index++;
-        setTimeout(() => this.checkHost, 500);
+        setTimeout(() => this.checkHost, this.interval);
       });
     }
     checkGroup(group, status) {
