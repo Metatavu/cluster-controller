@@ -1,0 +1,5 @@
+upstream cluster {
+    {{#hosts}}
+    server {{.}};
+    {{/hosts}}
+}
