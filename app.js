@@ -74,6 +74,44 @@
   app.get('/status', function(req, res) {
     res.send(statusUtils.loadStatus(config.statusPath));
   });
+  
+  app.get('/group/:group/down', function(req, res) {
+    var group = req.paramas.group;
+    var status = statusUtils.loadStatus(config.statusPath);
+    if(typeof(status.groups[group]) == 'undefined') {
+      res.status(404).send();
+    } else {
+      status.groups[group] = 'DOWN';
+      for (let i = 0; i < config.hosts.length; i++) {
+        var host = config.hosts[i];
+        if(group == host.group) {
+          watcher.setDown(host);
+          status.hosts[host.url] = 'DOWN';
+          console.log(util.format('Forced host %s down', host.url));
+        }
+      }
+      statusUtils.saveStatus(config.statusPath, status);
+      updateConfig();
+      res.send('ok');
+    }
+  });
+  
+  app.get('/group/:group/up', function(req, res) {
+    var group = req.paramas.group;
+    var status = statusUtils.loadStatus(config.statusPath);
+    if(typeof(status.groups[group]) == 'undefined') {
+      res.status(404).send();
+    } else {
+      for (let i = 0; i < config.hosts.length; i++) {
+        var host = config.hosts[i];
+        if(group == host.group) {
+          watcher.setUp(host);
+          console.log(util.format('Forced host %s up', host.url));
+        }
+      }
+      res.send('ok');
+    }
+  });
 
   watcher.on('host-up', (host) => {
     console.log(util.format('Host %s from group %s went UP', host.url, host.group));
