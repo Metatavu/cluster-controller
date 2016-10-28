@@ -76,7 +76,7 @@
   });
   
   app.get('/group/:group/down', function(req, res) {
-    var group = req.paramas.group;
+    var group = req.params.group;
     var status = statusUtils.loadStatus(config.statusPath);
     if(typeof(status.groups[group]) == 'undefined') {
       res.status(404).send();
@@ -97,7 +97,7 @@
   });
   
   app.get('/group/:group/up', function(req, res) {
-    var group = req.paramas.group;
+    var group = req.params.group;
     var status = statusUtils.loadStatus(config.statusPath);
     if(typeof(status.groups[group]) == 'undefined') {
       res.status(404).send();

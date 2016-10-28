@@ -21,9 +21,9 @@
       this.checkHost();
     }
     setUp(host) {
-      var index = manuallyDown.indexOf(host.url);
+      var index = this.manuallyDown.indexOf(host.url);
       if(index > -1) {
-        manuallyDown.splice(index, 1);
+        this.manuallyDown.splice(index, 1);
       }
     }
     setDown(host) {
