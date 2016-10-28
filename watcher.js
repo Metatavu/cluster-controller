@@ -30,6 +30,7 @@
       this.manuallyDown.push(host.url);
     }
     handleHostUp(host) {
+      var status = statusUtils.loadStatus(this.statusPath);
       if (status.hosts[host.url] == 'DOWN') {
         status.hosts[host.url] = 'UP';
         var groupUp = this.checkGroup(host.group, status);
@@ -44,6 +45,7 @@
       }
     }
     handleHostDown(host) {
+      var status = statusUtils.loadStatus(this.statusPath);
       if (status.hosts[host.url] == 'UP') {
         status.hosts[host.url] = 'DOWN';
         var groupUp = status.groups[host.group] == 'UP';
@@ -68,7 +70,6 @@
         setTimeout(() => this.checkHost(), this.interval)
       } else {
         request(options, (error, response, body) => {
-          var status = statusUtils.loadStatus(this.statusPath);
           if (!error && response.statusCode < 300 && response.statusCode >= 200) {
             this.handleHostUp(host);
           } else {
