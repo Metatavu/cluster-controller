@@ -81,17 +81,13 @@
     if(typeof(status.groups[group]) == 'undefined') {
       res.status(404).send();
     } else {
-      status.groups[group] = 'DOWN';
       for (let i = 0; i < config.hosts.length; i++) {
         var host = config.hosts[i];
         if(group == host.group) {
           watcher.setDown(host);
-          status.hosts[host.url] = 'DOWN';
           console.log(util.format('Forced host %s down', host.url));
         }
       }
-      statusUtils.saveStatus(config.statusPath, status);
-      updateConfig();
       res.send('ok');
     }
   });

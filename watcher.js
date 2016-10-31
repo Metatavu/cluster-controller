@@ -28,6 +28,7 @@
     }
     setDown(host) {
       this.manuallyDown.push(host.url);
+      this.handleHostDown(host);
     }
     handleHostUp(host) {
       var status = statusUtils.loadStatus(this.statusPath);
