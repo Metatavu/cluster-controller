@@ -15,6 +15,7 @@
       this.checkPath = config.checkPath;
       this.statusPath = config.statusPath;
       this.interval = config.checkInterval || 1000;
+      this.timeout = config.timeout || 1000;
       this.index = 0;
     }
     start() {
@@ -63,7 +64,8 @@
       var host = this.hosts[this.index];
       var options = {
         url: util.format('%s://%s%s', host.protocol, host.url, this.checkPath),
-        headers: host.headers
+        headers: host.headers,
+        timeout: this.timeout
       };
       if (this.manuallyDown.indexOf(host.url) > -1) {
         this.handleHostDown(host);
