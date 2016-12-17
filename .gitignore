@@ -1,3 +1,6 @@
 node_modules
 upstream.mustache
 config.js
+/.settings/
+/.tern-project
+/.project
