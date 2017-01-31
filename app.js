@@ -75,7 +75,7 @@
     var hostsDown = 0;
     var status = statusUtils.loadStatus(config.statusPath);
     for (let i = 0; i < totalHosts; i++) {
-      if (status.hosts[hosts[i].url] == 'DOWN') {
+      if (status.hosts[config.hosts[i].url] == 'DOWN') {
         hostsDown++;
       }
     }
