@@ -1,11 +1,11 @@
-"use strict";
-
+/*jshint esversion: 6 */
 (function() {
+'use strict';
 
-  var events = require('events');
-  var util = require('util');
-  var request = require('request');
-  var statusUtils = require('./statusUtils');
+  const events = require('events');
+  const util = require('util');
+  const request = require('request');
+  const statusUtils = require('./statusUtils');
 
   class Watcher extends events.EventEmitter {
     constructor(config) {
