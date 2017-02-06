@@ -17,8 +17,10 @@
   },
   "homepage": "https://github.com/otavanopisto/cluster-controller#readme",
   "dependencies": {
+    "async": "^2.1.4",
     "express": "^4.14.0",
     "mustache": "^2.2.1",
-    "request": "^2.76.0"
+    "request": "^2.76.0",
+    "socket.io-client": "^1.7.2"
   }
 }

@@ -1,4 +1,3 @@
-
 /*jshint esversion: 6 */
 (function () {
   'use strict';
@@ -13,6 +12,9 @@
   const exec = require('child_process').exec;
   const Watcher = require('./watcher');
   const watcher = new Watcher(config);
+  const restartQueue = async.queue((group, callback) => {
+    restartGroup(group, callback);
+  }, 1);
 
   function init() {
     var initialStatus = {
@@ -27,6 +29,26 @@
       }
     }
     statusUtils.saveStatus(config.statusPath, initialStatus);
+  }
+
+  function setGroupUp(group) {
+    for (let i = 0; i < config.hosts.length; i++) {
+      var host = config.hosts[i];
+      if (group == host.group) {
+        watcher.setUp(host);
+        console.log(util.format('Forced host %s up', host.url));
+      }
+    }
+  }
+
+  function setGroupDown(group) {
+    for (let i = 0; i < config.hosts.length; i++) {
+      var host = config.hosts[i];
+      if (group == host.group) {
+        watcher.setDown(host);
+        console.log(util.format('Forced host %s down', host.url));
+      }
+    }
   }
 
   function updateConfig() {
@@ -46,6 +68,54 @@
     reloadNginx();
   }
 
+  function restartGroup(group, callback) {
+    setGroupDown(group);
+
+    var child = exec(util.format('restart.sh %s', group));
+
+    child.stdout.on('data', function (data) {
+      console.log(data);
+    });
+
+    child.stderr.on('data', function (data) {
+      console.error(data);
+    });
+
+    child.on('close', function (code) {
+      if (code == 0) {
+        setGroupUp(group);
+        watcher.waitUntilUp(group, () => {
+          callback();
+        })
+      }
+    });
+  }
+
+  function updateGroup(group, callback) {
+    setGroupDown(group);
+
+    var child = exec(util.format('update.sh %s', group));
+
+    child.stdout.on('data', function (data) {
+      console.log(data);
+    });
+
+    child.stderr.on('data', function (data) {
+      console.error(data);
+    });
+
+    child.on('close', function (code) {
+      if (code == 0) {
+        setGroupUp(group);
+        watcher.waitUntilUp(group, () => {
+          callback(null, group);
+        })
+      } else {
+        callback('Update Failed');
+      }
+    });
+  }
+
   function reloadNginx() {
     var child = exec('service nginx reload');
 
@@ -63,6 +133,18 @@
   }
 
   init();
+
+  var socket = require('socket.io-client')(config.metadog);
+
+  socket.on('server:critical', (data) => {
+    var server = data.server;
+    for (var i = 0; i < config.hosts.length; i++) {
+      var host = config.hosts[i];
+      if (host.name == server) {
+        restartGroup.push(host.group);
+      }
+    }
+  });
 
   app.set('port', config.port);
 
@@ -97,13 +179,7 @@
     if (typeof (status.groups[group]) == 'undefined') {
       res.status(404).send();
     } else {
-      for (let i = 0; i < config.hosts.length; i++) {
-        var host = config.hosts[i];
-        if (group == host.group) {
-          watcher.setDown(host);
-          console.log(util.format('Forced host %s down', host.url));
-        }
-      }
+      setGroupDown(group);
       res.send('ok');
     }
   });
@@ -114,15 +190,42 @@
     if (typeof (status.groups[group]) == 'undefined') {
       res.status(404).send();
     } else {
-      for (let i = 0; i < config.hosts.length; i++) {
-        var host = config.hosts[i];
-        if (group == host.group) {
-          watcher.setUp(host);
-          console.log(util.format('Forced host %s up', host.url));
-        }
-      }
+      setGroupUp(group);
       res.send('ok');
     }
+  });
+
+  app.get('/cluster/restart', (req, res) => {
+    var status = statusUtils.loadStatus(config.statusPath);
+    var groups = Object.keys(status.groups);
+    for (let i = 0; i < groups.length; i++) {
+      restartQueue.push(groups[i]);
+    }
+  });
+
+  app.get('/cluster/update', (req, res) => {
+    var status = statusUtils.loadStatus(config.statusPath);
+    var groups = Object.keys(status.groups);
+    var firstGroup = groups[0];
+    for (let i = 0; i < groups.length; i++) {
+      var group = groups[i];
+      if (status.groups[group] == 'DOWN') {
+        firstGroup = group;
+      }
+    }
+    var groups = groups.slice(groups.indexOf(firstGroup), 1);
+    updateGroup(firstGroup, (err, updatedGroup) => {
+      if (err) {
+        console.error('Update Failed');
+      } else {
+        console.log(util.format('successfully updated group: %s', updatedGroup));
+        for (let i = 0; i < groups.length; i++) {
+          updateGroup(groups[i], (err, updatedGroup) => {
+            console.log(util.format('successfully updated group: %s', updatedGroup));
+          });
+        }
+      }
+    });
   });
 
   watcher.on('host-up', (host) => {

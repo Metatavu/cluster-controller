@@ -12,6 +12,7 @@
       super();
       this.hosts = config.hosts;
       this.manuallyDown = [];
+      this.onGroupUp = {};
       this.checkPath = config.checkPath;
       this.statusPath = config.statusPath;
       this.interval = config.checkInterval || 1000;
@@ -31,6 +32,13 @@
       this.manuallyDown.push(host.url);
       this.handleHostDown(host);
     }
+    waitUntilUp(group, callback) {
+      if(!this.onGroupUp[group]) {
+        this.onGroupUp[group] = [callback];
+      } else {
+        this.onGroupUp[group].push(callback)
+      }
+    }
     handleHostUp(host) {
       var status = statusUtils.loadStatus(this.statusPath);
       if (status.hosts[host.url] == 'DOWN') {
@@ -38,6 +46,10 @@
         var groupUp = this.checkGroup(host.group, status);
         if (groupUp) {
           status.groups[host.group] = 'UP'
+          for(let i = 0; i < this.onGroupUp[host.group].length; i++) {
+            this.onGroupUp[host.group][i]();
+          }
+          this.onGroupUp[host.group] = [];
         }
         statusUtils.saveStatus(this.statusPath, status);
         this.emit('host-up', host);
