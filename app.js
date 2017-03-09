@@ -109,7 +109,7 @@
             headers: host.headers,
             timeout: 10000
           };
-          request(options);
+          request(options, (error, response, body) => {});
         }
       }
       callback();
