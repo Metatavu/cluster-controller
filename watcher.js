@@ -96,7 +96,7 @@
     updateGroups() {
       var status = statusUtils.loadStatus(this.statusPath);
       for (let i = 0; i < this.hosts.length; i++) {
-        let host = hosts[i];
+        let host = this.hosts[i];
         if (status.groups[host.group] == 'UP') {
           if(this.onGroupUp[host.group]) {
             for(let i = 0; i < this.onGroupUp[host.group].length; i++) {

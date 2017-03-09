@@ -139,6 +139,7 @@
           }, 1000 * 60 * 10);
 
           watcher.waitUntilUp(group, () => {
+            console.log(util.format('successfully restarted group %s', group));
             clearTimeout(timeout);
             callback();
           });
@@ -171,6 +172,7 @@
           }, 1000 * 60 * 10);
 
           watcher.waitUntilUp(group, () => {
+            console.log(util.format('Successfully updated group %s to %s', group, war));
             clearTimeout(timeout);
             callback(null, group);
           });
@@ -267,6 +269,8 @@
     for (let i = 0; i < groups.length; i++) {
       restartQueue.push(groups[i]);
     }
+
+    res.send('ok');
   });
 
   app.get('/cluster/update/:war', (req, res) => {
@@ -288,6 +292,8 @@
         }
       }
     });
+
+    res.send('ok');
   });
 
   watcher.on('host-up', (host) => {
