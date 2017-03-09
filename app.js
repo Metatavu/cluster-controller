@@ -72,10 +72,10 @@
   function createCompareShutdownPriorities() {
     var status = statusUtils.loadStatus(config.statusPath);
 
-    return function(group1, group2) {
+    return function (group1, group2) {
       if (status.groups[group1] == 'DOWN') {
         return -1;
-      } else if(status.groups[group2] == 'DOWN') {
+      } else if (status.groups[group2] == 'DOWN') {
         return 1;
       } else {
         return 0;
@@ -97,17 +97,16 @@
 
   function prepareForShutdown(group, callback) {
     setGroupDown(group);
-    if (config.hooks.beforeShutdown) {
+    if (config.hooks && config.hooks.beforeShutdown) {
       var hosts = getHostsByGroup(group);
       for (let i = 0; i < config.hooks.beforeShutdown.length; i++) {
-
         var beforeShutdownHook = config.hooks.beforeShutdown[i];
         for (let j = 0; j < hosts.length; j++) {
           var host = hosts[i];
           var options = {
             url: util.format('%s://%s%s', host.protocol, host.url, beforeShutdownHook.path),
             headers: host.headers,
-            timeout: this.timeout
+            timeout: 10000
           };
           request(options);
         }
@@ -132,9 +131,19 @@
       child.on('close', function (code) {
         if (code == 0) {
           setGroupUp(group);
-          watcher.waitUntilUp(group, () => {
+
+          var timeout = setTimeout(() => {
+            console.log(util.format('Left group %s down because of timeout', group));
             callback();
-          })
+          }, 1000 * 60 * 10);
+
+          watcher.waitUntilUp(group, () => {
+            clearTimeout(timeout);
+            callback();
+          });
+        } else {
+          console.log(util.format('Left group %s down because of error code %s', group, code));
+          callback();
         }
       });
     });
@@ -155,9 +164,15 @@
       child.on('close', function (code) {
         if (code == 0) {
           setGroupUp(group);
+          
+          var timeout = setTimeout(() => {
+            callback('update timed out');
+          }, 1000 * 60 * 10);
+
           watcher.waitUntilUp(group, () => {
+            clearTimeout(timeout);
             callback(null, group);
-          })
+          });
         } else {
           callback('Update Failed');
         }
