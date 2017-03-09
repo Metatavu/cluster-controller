@@ -278,8 +278,7 @@
     var status = statusUtils.loadStatus(config.statusPath);
     var groups = Object.keys(status.groups);
     groups.sort(createCompareShutdownPriorities());
-    var firstGroup = groups[0];
-    var groups = groups.slice(groups.indexOf(firstGroup), 1);
+    var firstGroup = groups.shift();
     updateGroup(firstGroup, war, (err, updatedGroup) => {
       if (err) {
         console.error('Update Failed');
