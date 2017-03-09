@@ -1,6 +1,6 @@
 {
   "name": "cluster-controller",
-  "version": "0.0.7-alpha-2",
+  "version": "0.1.0-alpha-1",
   "description": "",
   "main": "app.js",
   "scripts": {
@@ -20,7 +20,7 @@
     "async": "^2.1.4",
     "express": "^4.14.0",
     "mustache": "^2.2.1",
-    "request": "^2.76.0",
+    "request": "^2.80.0",
     "socket.io-client": "^1.7.2"
   }
 }

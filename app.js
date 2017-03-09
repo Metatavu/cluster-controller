@@ -4,6 +4,7 @@
 
   const express = require('express');
   const app = express();
+  const request = require('request');
   const statusUtils = require('./statusUtils');
   const config = require('./config');
   const util = require('util');
@@ -68,51 +69,99 @@
     reloadNginx();
   }
 
-  function restartGroup(group, callback) {
-    setGroupDown(group);
+  function createCompareShutdownPriorities() {
+    var status = statusUtils.loadStatus(config.statusPath);
 
-    var child = exec(util.format('restart.sh %s', group));
-
-    child.stdout.on('data', function (data) {
-      console.log(data);
-    });
-
-    child.stderr.on('data', function (data) {
-      console.error(data);
-    });
-
-    child.on('close', function (code) {
-      if (code == 0) {
-        setGroupUp(group);
-        watcher.waitUntilUp(group, () => {
-          callback();
-        })
+    return function(group1, group2) {
+      if (status.groups[group1] == 'DOWN') {
+        return -1;
+      } else if(status.groups[group2] == 'DOWN') {
+        return 1;
+      } else {
+        return 0;
       }
+    }
+  }
+
+  function getHostsByGroup(group) {
+    var hosts = [];
+    for (let i = 0; i < config.hosts.length; i++) {
+      var host = config.hosts[i];
+      if (host.group == group) {
+        hosts.push(host);
+      }
+    }
+
+    return hosts;
+  }
+
+  function prepareForShutdown(group, callback) {
+    setGroupDown(group);
+    if (config.hooks.beforeShutdown) {
+      var hosts = getHostsByGroup(group);
+      for (let i = 0; i < config.hooks.beforeShutdown.length; i++) {
+
+        var beforeShutdownHook = config.hooks.beforeShutdown[i];
+        for (let j = 0; j < hosts.length; j++) {
+          var host = hosts[i];
+          var options = {
+            url: util.format('%s://%s%s', host.protocol, host.url, beforeShutdownHook.path),
+            headers: host.headers,
+            timeout: this.timeout
+          };
+          request(options);
+        }
+        callback();
+      }
+    }
+  }
+
+
+  function restartGroup(group, callback) {
+    prepareForShutdown(group, () => {
+      var child = exec(util.format('restart.sh %s', group));
+
+      child.stdout.on('data', function (data) {
+        console.log(data);
+      });
+
+      child.stderr.on('data', function (data) {
+        console.error(data);
+      });
+
+      child.on('close', function (code) {
+        if (code == 0) {
+          setGroupUp(group);
+          watcher.waitUntilUp(group, () => {
+            callback();
+          })
+        }
+      });
     });
   }
 
-  function updateGroup(group, callback) {
-    setGroupDown(group);
+  function updateGroup(group, war, callback) {
+    prepareForShutdown(group, () => {
+      var child = exec(util.format('update.sh %s', group, war));
 
-    var child = exec(util.format('update.sh %s', group));
+      child.stdout.on('data', function (data) {
+        console.log(data);
+      });
 
-    child.stdout.on('data', function (data) {
-      console.log(data);
-    });
+      child.stderr.on('data', function (data) {
+        console.error(data);
+      });
 
-    child.stderr.on('data', function (data) {
-      console.error(data);
-    });
-
-    child.on('close', function (code) {
-      if (code == 0) {
-        setGroupUp(group);
-        watcher.waitUntilUp(group, () => {
-          callback(null, group);
-        })
-      } else {
-        callback('Update Failed');
-      }
+      child.on('close', function (code) {
+        if (code == 0) {
+          setGroupUp(group);
+          watcher.waitUntilUp(group, () => {
+            callback(null, group);
+          })
+        } else {
+          callback('Update Failed');
+        }
+      });
     });
   }
 
@@ -198,29 +247,26 @@
   app.get('/cluster/restart', (req, res) => {
     var status = statusUtils.loadStatus(config.statusPath);
     var groups = Object.keys(status.groups);
+    groups.sort(createCompareShutdownPriorities());
     for (let i = 0; i < groups.length; i++) {
       restartQueue.push(groups[i]);
     }
   });
 
-  app.get('/cluster/update', (req, res) => {
+  app.get('/cluster/update/:war', (req, res) => {
+    var war = req.params.war;
     var status = statusUtils.loadStatus(config.statusPath);
     var groups = Object.keys(status.groups);
+    groups.sort(createCompareShutdownPriorities());
     var firstGroup = groups[0];
-    for (let i = 0; i < groups.length; i++) {
-      var group = groups[i];
-      if (status.groups[group] == 'DOWN') {
-        firstGroup = group;
-      }
-    }
     var groups = groups.slice(groups.indexOf(firstGroup), 1);
-    updateGroup(firstGroup, (err, updatedGroup) => {
+    updateGroup(firstGroup, war, (err, updatedGroup) => {
       if (err) {
         console.error('Update Failed');
       } else {
         console.log(util.format('successfully updated group: %s', updatedGroup));
         for (let i = 0; i < groups.length; i++) {
-          updateGroup(groups[i], (err, updatedGroup) => {
+          updateGroup(groups[i], war, (err, updatedGroup) => {
             console.log(util.format('successfully updated group: %s', updatedGroup));
           });
         }
