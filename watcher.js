@@ -46,12 +46,6 @@
         var groupUp = this.checkGroup(host.group, status);
         if (groupUp) {
           status.groups[host.group] = 'UP'
-          if(this.onGroupUp[host.group]) {
-            for(let i = 0; i < this.onGroupUp[host.group].length; i++) {
-              this.onGroupUp[host.group][i]();
-            }
-            this.onGroupUp[host.group] = [];
-          }
         }
         statusUtils.saveStatus(this.statusPath, status);
         this.emit('host-up', host);
@@ -95,6 +89,22 @@
           this.index++;
           setTimeout(() => this.checkHost(), this.interval);
         });
+      }
+
+      this.updateGroups();
+    }
+    updateGroups() {
+      var status = statusUtils.loadStatus(this.statusPath);
+      for (let i = 0; i < this.hosts.length; i++) {
+        let host = hosts[i];
+        if (status.groups[host.group] == 'UP') {
+          if(this.onGroupUp[host.group]) {
+            for(let i = 0; i < this.onGroupUp[host.group].length; i++) {
+              this.onGroupUp[host.group][i]();
+            }
+            this.onGroupUp[host.group] = [];
+          }
+        }
       }
     }
     checkGroup(group, status) {
