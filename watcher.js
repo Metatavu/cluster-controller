@@ -16,7 +16,7 @@
       this.checkPath = config.checkPath;
       this.statusPath = config.statusPath;
       this.interval = config.checkInterval || 1000;
-      this.timeout = config.timeout || 1000;
+      this.timeout = config.timeout || 10000;
       this.index = 0;
     }
     start() {
