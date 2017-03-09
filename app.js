@@ -8,6 +8,7 @@
   const statusUtils = require('./statusUtils');
   const config = require('./config');
   const util = require('util');
+  const async = require('async');
   const mustache = require('mustache');
   const fs = require('fs');
   const exec = require('child_process').exec;
@@ -102,7 +103,7 @@
       for (let i = 0; i < config.hooks.beforeShutdown.length; i++) {
         var beforeShutdownHook = config.hooks.beforeShutdown[i];
         for (let j = 0; j < hosts.length; j++) {
-          var host = hosts[i];
+          var host = hosts[j];
           var options = {
             url: util.format('%s://%s%s', host.protocol, host.url, beforeShutdownHook.path),
             headers: host.headers,
@@ -110,15 +111,15 @@
           };
           request(options);
         }
-        callback();
       }
+      callback();
     }
   }
 
 
   function restartGroup(group, callback) {
     prepareForShutdown(group, () => {
-      var child = exec(util.format('restart.sh %s', group));
+      var child = exec(util.format('/opt/cluster-controller/restart.sh %s', group));
 
       child.stdout.on('data', function (data) {
         console.log(data);
@@ -151,7 +152,7 @@
 
   function updateGroup(group, war, callback) {
     prepareForShutdown(group, () => {
-      var child = exec(util.format('update.sh %s', group, war));
+      var child = exec(util.format('/opt/cluster-controller/update.sh %s %s', group, war));
 
       child.stdout.on('data', function (data) {
         console.log(data);
@@ -198,9 +199,9 @@
 
   init();
 
-  var socket = require('socket.io-client')(config.metadog);
+  //var socket = require('socket.io-client')(config.metadog);
 
-  socket.on('server:critical', (data) => {
+  /*socket.on('server:critical', (data) => {
     var server = data.server;
     for (var i = 0; i < config.hosts.length; i++) {
       var host = config.hosts[i];
@@ -208,7 +209,7 @@
         restartGroup.push(host.group);
       }
     }
-  });
+  });*/
 
   app.set('port', config.port);
 
