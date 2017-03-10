@@ -171,6 +171,7 @@
 
           var timeout = setTimeout(() => {
             console.log(util.format('Left group %s down because of timeout', group));
+            watcher.clearUpCallbacks(group);
             callback();
           }, 1000 * 60 * 10);
 
@@ -202,7 +203,19 @@
       child.on('close', function (code) {
         if (code == 0) {
           setGroupUp(group);
-          callback(null, group);
+          
+          var timeout = setTimeout(() => {
+            console.log(util.format('Left group %s down because of timeout', group));
+            watcher.clearUpCallbacks(group);
+            callback();
+          }, 1000 * 60 * 10);
+
+          watcher.waitUntilUp(group, () => {
+            console.log(util.format('successfully updated war %s group %s', war, group));
+            clearTimeout(timeout);
+            stopFailsafeServer();
+            callback(null, group);
+          });
         } else {
           callback('Update Failed');
         }
@@ -230,6 +243,8 @@
     var status = statusUtils.loadStatus(config.statusPath);
     var groups = Object.keys(status.groups);
     groups.sort(createCompareShutdownPriorities());
+    
+    
     for (let i = 0; i < groups.length; i++) {
       updateGroup(groups[i], war, (err, updatedGroup) => {
         if(err) {
