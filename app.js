@@ -120,7 +120,7 @@
       failsafeProcess = spawn(failsafeHost.properties.jbossCli);
       failsafeProcess.stdin.setEncoding('utf-8');
       failsafeProcess.stdout.pipe(process.stdout);
-      failsafeProcess.stdin.write(util.format('embed-server --admin-only=false --server-config=%s\n', failsafeHost.properties.configFile));
+      failsafeProcess.stdin.write(util.format('embed-server --admin-only=false --std-out=echo --server-config=%s\n', failsafeHost.properties.configFile));
       failsafeProcess.stdin.write(util.format('deploy %s/%s\n', failsafeHost.properties.deploymentsPath, war));
       failsafeProcess.stdin.end();
     } else {
