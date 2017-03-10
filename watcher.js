@@ -39,6 +39,9 @@
         this.onGroupUp[group].push(callback)
       }
     }
+    clearUpCallbacks(group) {
+      this.onGroupUp[group] = [];
+    }
     handleHostUp(host) {
       var status = statusUtils.loadStatus(this.statusPath);
       if (status.hosts[host.url] == 'DOWN') {

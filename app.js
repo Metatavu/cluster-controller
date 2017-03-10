@@ -12,12 +12,18 @@
   const mustache = require('mustache');
   const fs = require('fs');
   const exec = require('child_process').exec;
+  const spawn = require('child_process').spawn;
   const Watcher = require('./watcher');
   const watcher = new Watcher(config);
+  const _ = require('lodash');
   const restartQueue = async.queue((group, callback) => {
     restartGroup(group, callback);
   }, 1);
 
+  const FAILSAFE_TYPE = 'failsafe';
+
+  var failsafeProcess = null;
+  
   function init() {
     var initialStatus = {
       groups: {},
@@ -94,6 +100,36 @@
     }
 
     return hosts;
+  }
+
+  function getFailsafeHost() {
+    for (let i = 0; i < config.hosts.length; i++) {
+      var host = config.hosts[i];
+      if (host.type == FAILSAFE_TYPE) {
+        return host;
+      }
+    }
+    
+    return null;
+  }
+
+  function startFailsafeServer(war) {
+    var failsafeHost = getFailsafeHost();
+    if (failsafeHost) {
+      failsafeProcess = spawn(failsafeHost.properties.jbossCli);
+      failsafeProcess.stdin.setEncoding('utf-8');
+      failsafeProcess.stdin.write(util.format('embed-server --admin-only=false --server-config=%s\n', failsafeHost.properties.configFile));
+      failsafeProcess.stdin.write(util.format('deploy %s/%s\n', failsafeHost.properties.deploymentsPath, war));
+      failsafeProcess.stdin.end();
+    } else {
+      console.log('Failsafe host not configured');
+    }
+  }
+  
+  function stopFailsafeServer() {
+    if (failsafeProcess) {
+      failsafeProcess.kill();
+    }
   }
 
   function prepareForShutdown(group, callback) {
@@ -190,6 +226,21 @@
     });
   }
 
+  function updateGroups(war) {
+    var status = statusUtils.loadStatus(config.statusPath);
+    var groups = Object.keys(status.groups);
+    groups.sort(createCompareShutdownPriorities());
+    for (let i = 0; i < groups.length; i++) {
+      updateGroup(groups[i], war, (err, updatedGroup) => {
+        if(err) {
+          console.log(util.format('WARNING Updated failed group: %s %s', updatedGroup, err));
+        } else {
+          console.log(util.format('successfully updated group: %s', updatedGroup)); 
+        }
+      });
+    }
+  }
+
   init();
 
   //var socket = require('socket.io-client')(config.metadog);
@@ -211,7 +262,7 @@
   });
 
   app.get('/health', (req, res) => {
-    var totalHosts = config.hosts.length;
+    var totalHosts = _.filter(config.hosts, (host) => { return host.type !== FAILSAFE_TYPE; }).length;
     var hostsDown = 0;
     var status = statusUtils.loadStatus(config.statusPath);
     for (let i = 0; i < totalHosts; i++) {
@@ -266,34 +317,40 @@
 
   app.get('/cluster/update/:war', (req, res) => {
     var war = req.params.war;
-    var status = statusUtils.loadStatus(config.statusPath);
-    var groups = Object.keys(status.groups);
-    groups.sort(createCompareShutdownPriorities());
-    var firstGroup = groups.shift();
-    updateGroup(firstGroup, war, (err, updatedGroup) => {
-      if (err) {
-        console.error('Update Failed');
-      } else {
-        console.log(util.format('successfully updated group: %s', updatedGroup));
-        for (let i = 0; i < groups.length; i++) {
-          updateGroup(groups[i], war, (err, updatedGroup) => {
-            console.log(util.format('successfully updated group: %s', updatedGroup));
-          });
-        }
-      }
-    });
+    
+    var failsafeHost = getFailsafeHost();
+    if(!failsafeHost) {
+      console.log('WARNING! Failsafe host not configured, updating without failsafe.');
+      updateGroups(war);
+    } else {
+      startFailsafeServer();
+      var timeout = setTimeout(() => {
+        console.log('WARNING! Failsafe host was not able to start, skipping update.');
+        watcher.clearUpCallbacks(failsafeHost.group);
+      }, 1000 * 60 * 10);
 
+      watcher.waitUntilUp(failsafeHost.group, () => {
+        console.log('Failsafe server up');
+        clearTimeout(timeout);
+        updateGroups(war);
+      });
+    }
+    
     res.send('ok');
   });
 
   watcher.on('host-up', (host) => {
     console.log(util.format('Host %s from group %s went UP', host.url, host.group));
-    updateConfig();
+    if(host.type !== FAILSAFE_TYPE) {
+      updateConfig(); 
+    }
   });
 
   watcher.on('host-down', (host) => {
     console.log(util.format('Host %s from group %s went DOWN', host.url, host.group));
-    updateConfig();
+    if(host.type !== FAILSAFE_TYPE) {
+      updateConfig(); 
+    }
   });
 
   watcher.on('group-up', (group) => {
