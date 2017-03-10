@@ -17,6 +17,7 @@
       this.statusPath = config.statusPath;
       this.interval = config.checkInterval || 1000;
       this.timeout = config.timeout || 10000;
+      this.waitAfterUp = config.waitAfterUp || 10000;
       this.index = 0;
     }
     start() {
@@ -57,7 +58,7 @@
           if (groupUp) {
             this.emit('group-up', host.group);
           }
-        }, 5000);
+        }, this.waitAfterUp);
       }
     }
     handleHostDown(host) {
@@ -106,7 +107,7 @@
         if (status.groups[host.group] == 'UP') {
           setTimeout(() => {
             this.runUpCallbacks(host.group);
-          }, 5000);
+          }, this.waitAfterUp);
         }
       }
     }
