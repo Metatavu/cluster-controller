@@ -10,7 +10,7 @@
   const util = require('util');
   const async = require('async');
   const mustache = require('mustache');
-  const fs = require('fs');
+  const fs = require('fs-extra');
   const exec = require('child_process').exec;
   const spawn = require('child_process').spawn;
   const Watcher = require('./watcher');
@@ -117,12 +117,12 @@
     var failsafeHost = getFailsafeHost();
     if (failsafeHost) {
       console.log('Starting failsafe server');
+      fs.copySync(failsafeHost.properties.configOrig, failsafeHost.properties.configFile);
       failsafeProcess = spawn(failsafeHost.properties.jbossCli);
       failsafeProcess.stdin.setEncoding('utf-8');
       failsafeProcess.stdout.pipe(process.stdout);
-      failsafeProcess.stdin.write(util.format('embed-server --admin-only=false --std-out=echo --server-config=%s\n', failsafeHost.properties.configFile));
-      failsafeProcess.stdin.write('undeploy failsafe.war');
-      failsafeProcess.stdin.write(util.format('deploy --name=failsafe.war --force %s/%s\n', failsafeHost.properties.deploymentsPath, war));
+      failsafeProcess.stdin.write(util.format('embed-server --admin-only=false --std-out=echo\n'));
+      failsafeProcess.stdin.write(util.format('deploy %s/%s\n', failsafeHost.properties.deploymentsPath, war));
     } else {
       console.log('Failsafe host not configured');
     }
@@ -131,6 +131,7 @@
   function stopFailsafeServer() {
     if (failsafeProcess) {
       failsafeProcess.kill();
+      failsafeProcess = null;
     }
   }
 
