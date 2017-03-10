@@ -242,8 +242,13 @@
   function updateGroups(war) {
     var status = statusUtils.loadStatus(config.statusPath);
     var groups = Object.keys(status.groups);
-    groups.sort(createCompareShutdownPriorities());
     
+    var failsafeHost = getFailsafeHost();
+    if (failsafeHost) {
+      _.remove(groups, (g) => { return g == failsafeHost.group; });
+    }
+    
+    groups.sort(createCompareShutdownPriorities());
     
     for (let i = 0; i < groups.length; i++) {
       updateGroup(groups[i], war, (err, updatedGroup) => {
