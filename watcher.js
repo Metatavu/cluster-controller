@@ -51,10 +51,13 @@
           status.groups[host.group] = 'UP'
         }
         statusUtils.saveStatus(this.statusPath, status);
-        this.emit('host-up', host);
-        if (groupUp) {
-          this.emit('group-up', host.group);
-        }
+        
+        setTimeout(() => {
+          this.emit('host-up', host);
+          if (groupUp) {
+            this.emit('group-up', host.group);
+          }
+        }, 5000);
       }
     }
     handleHostDown(host) {

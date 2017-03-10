@@ -121,8 +121,8 @@
       failsafeProcess.stdin.setEncoding('utf-8');
       failsafeProcess.stdout.pipe(process.stdout);
       failsafeProcess.stdin.write(util.format('embed-server --admin-only=false --std-out=echo --server-config=%s\n', failsafeHost.properties.configFile));
-      failsafeProcess.stdin.write(util.format('deploy %s/%s\n', failsafeHost.properties.deploymentsPath, war));
-      failsafeProcess.stdin.end();
+      failsafeProcess.stdin.write('undeploy failsafe.war');
+      failsafeProcess.stdin.write(util.format('deploy --name=failsafe.war --force %s/%s\n', failsafeHost.properties.deploymentsPath, war));
     } else {
       console.log('Failsafe host not configured');
     }
