@@ -323,7 +323,7 @@
       console.log('WARNING! Failsafe host not configured, updating without failsafe.');
       updateGroups(war);
     } else {
-      startFailsafeServer();
+      startFailsafeServer(war);
       var timeout = setTimeout(() => {
         console.log('WARNING! Failsafe host was not able to start, skipping update.');
         watcher.clearUpCallbacks(failsafeHost.group);
@@ -341,16 +341,12 @@
 
   watcher.on('host-up', (host) => {
     console.log(util.format('Host %s from group %s went UP', host.url, host.group));
-    if(host.type !== FAILSAFE_TYPE) {
-      updateConfig(); 
-    }
+    updateConfig(); 
   });
 
   watcher.on('host-down', (host) => {
     console.log(util.format('Host %s from group %s went DOWN', host.url, host.group));
-    if(host.type !== FAILSAFE_TYPE) {
-      updateConfig(); 
-    }
+    updateConfig(); 
   });
 
   watcher.on('group-up', (group) => {
