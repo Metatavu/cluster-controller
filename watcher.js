@@ -104,13 +104,18 @@
       for (let i = 0; i < this.hosts.length; i++) {
         let host = this.hosts[i];
         if (status.groups[host.group] == 'UP') {
-          if(this.onGroupUp[host.group]) {
-            for(let i = 0; i < this.onGroupUp[host.group].length; i++) {
-              this.onGroupUp[host.group][i]();
-            }
-            this.onGroupUp[host.group] = [];
-          }
+          setTimeout(() => {
+            this.runUpCallbacks(host.group);
+          }, 5000);
         }
+      }
+    }
+    runUpCallbacks(group) {
+      if(this.onGroupUp[group]) {
+        for(let i = 0; i < this.onGroupUp[group].length; i++) {
+          this.onGroupUp[group][i]();
+        }
+        this.onGroupUp[group] = [];
       }
     }
     checkGroup(group, status) {
