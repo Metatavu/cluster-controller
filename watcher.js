@@ -12,10 +12,11 @@
       super();
       this.hosts = config.hosts;
       this.manuallyDown = [];
+      this.onGroupUp = {};
       this.checkPath = config.checkPath;
       this.statusPath = config.statusPath;
       this.interval = config.checkInterval || 1000;
-      this.timeout = config.timeout || 1000;
+      this.timeout = config.timeout || 10000;
       this.index = 0;
     }
     start() {
@@ -30,6 +31,13 @@
     setDown(host) {
       this.manuallyDown.push(host.url);
       this.handleHostDown(host);
+    }
+    waitUntilUp(group, callback) {
+      if(!this.onGroupUp[group]) {
+        this.onGroupUp[group] = [callback];
+      } else {
+        this.onGroupUp[group].push(callback)
+      }
     }
     handleHostUp(host) {
       var status = statusUtils.loadStatus(this.statusPath);
@@ -81,6 +89,22 @@
           this.index++;
           setTimeout(() => this.checkHost(), this.interval);
         });
+      }
+
+      this.updateGroups();
+    }
+    updateGroups() {
+      var status = statusUtils.loadStatus(this.statusPath);
+      for (let i = 0; i < this.hosts.length; i++) {
+        let host = this.hosts[i];
+        if (status.groups[host.group] == 'UP') {
+          if(this.onGroupUp[host.group]) {
+            for(let i = 0; i < this.onGroupUp[host.group].length; i++) {
+              this.onGroupUp[host.group][i]();
+            }
+            this.onGroupUp[host.group] = [];
+          }
+        }
       }
     }
     checkGroup(group, status) {
