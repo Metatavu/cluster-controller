@@ -166,16 +166,7 @@
       child.on('close', function (code) {
         if (code == 0) {
           setGroupUp(group);
-          
-          /*var timeout = setTimeout(() => {
-            callback('update timed out');
-          }, 1000 * 60 * 10);
-
-          watcher.waitUntilUp(group, () => {
-            console.log(util.format('Successfully updated group %s to %s', group, war));
-            clearTimeout(timeout);*/
-            callback(null, group);
-          //});
+          callback(null, group);
         } else {
           callback('Update Failed');
         }
