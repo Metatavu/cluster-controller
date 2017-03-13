@@ -285,14 +285,17 @@
   });
 
   app.get('/health', (req, res) => {
-    var totalHosts = _.filter(config.hosts, (host) => { return host.type !== FAILSAFE_TYPE; }).length;
+    var hosts = _.filter(config.hosts, (host) => { return host.type !== FAILSAFE_TYPE; });
+    var totalHosts = hosts.length;
     var hostsDown = 0;
     var status = statusUtils.loadStatus(config.statusPath);
+    
     for (let i = 0; i < totalHosts; i++) {
-      if (status.hosts[config.hosts[i].url] == 'DOWN') {
+      if (status.hosts[hosts[i].url] == 'DOWN') {
         hostsDown++;
       }
     }
+    
     if (hostsDown == 0) {
       res.send(util.format('OK: %s / %s hosts up.', (totalHosts - hostsDown), totalHosts));
     } else {
@@ -303,6 +306,7 @@
         res.send(util.format('WARNING: %s / %s hosts up.', (totalHosts - hostsDown), totalHosts));
       }
     }
+    
   });
 
   app.get('/group/:group/down', (req, res) => {
