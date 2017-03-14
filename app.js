@@ -10,14 +10,20 @@
   const util = require('util');
   const async = require('async');
   const mustache = require('mustache');
-  const fs = require('fs');
+  const fs = require('fs-extra');
   const exec = require('child_process').exec;
+  const spawn = require('child_process').spawn;
   const Watcher = require('./watcher');
   const watcher = new Watcher(config);
+  const _ = require('lodash');
   const restartQueue = async.queue((group, callback) => {
     restartGroup(group, callback);
   }, 1);
 
+  const FAILSAFE_TYPE = 'failsafe';
+
+  var failsafeProcess = null;
+  
   function init() {
     var initialStatus = {
       groups: {},
@@ -96,6 +102,39 @@
     return hosts;
   }
 
+  function getFailsafeHost() {
+    for (let i = 0; i < config.hosts.length; i++) {
+      var host = config.hosts[i];
+      if (host.type == FAILSAFE_TYPE) {
+        return host;
+      }
+    }
+    
+    return null;
+  }
+
+  function startFailsafeServer(war) {
+    var failsafeHost = getFailsafeHost();
+    if (failsafeHost) {
+      console.log('Starting failsafe server');
+      fs.copySync(failsafeHost.properties.configOrig, failsafeHost.properties.configFile);
+      failsafeProcess = spawn(failsafeHost.properties.jbossCli);
+      failsafeProcess.stdin.setEncoding('utf-8');
+      failsafeProcess.stdout.pipe(process.stdout);
+      failsafeProcess.stdin.write(util.format('embed-server --admin-only=false --std-out=echo\n'));
+      failsafeProcess.stdin.write(util.format('deploy %s/%s\n', failsafeHost.properties.deploymentsPath, war));
+    } else {
+      console.log('Failsafe host not configured');
+    }
+  }
+  
+  function stopFailsafeServer() {
+    if (failsafeProcess) {
+      failsafeProcess.kill();
+      failsafeProcess = null;
+    }
+  }
+
   function prepareForShutdown(group, callback) {
     setGroupDown(group);
     if (config.hooks && config.hooks.beforeShutdown) {
@@ -112,8 +151,9 @@
           request(options, (error, response, body) => {});
         }
       }
-      callback();
     }
+    
+    callback();
   }
 
 
@@ -135,6 +175,7 @@
 
           var timeout = setTimeout(() => {
             console.log(util.format('Left group %s down because of timeout', group));
+            watcher.clearUpCallbacks(group);
             callback();
           }, 1000 * 60 * 10);
 
@@ -151,9 +192,9 @@
     });
   }
 
-  function updateGroup(group, war, callback) {
+  function shutdownGroup(group, callback) {
     prepareForShutdown(group, () => {
-      var child = exec(util.format('/opt/cluster-controller/update.sh %s %s', group, war));
+      var child = exec(util.format('/opt/cluster-controller/shutdown.sh %s', group));
 
       child.stdout.on('data', function (data) {
         console.log(data);
@@ -165,21 +206,44 @@
 
       child.on('close', function (code) {
         if (code == 0) {
-          setGroupUp(group);
-          
-          /*var timeout = setTimeout(() => {
-            callback('update timed out');
-          }, 1000 * 60 * 10);
-
-          watcher.waitUntilUp(group, () => {
-            console.log(util.format('Successfully updated group %s to %s', group, war));
-            clearTimeout(timeout);*/
-            callback(null, group);
-          //});
+          callback();
         } else {
-          callback('Update Failed');
+          callback(util.format('Error code: %s', code));
         }
       });
+    });
+  }
+
+  function updateGroup(group, war, callback) {
+    var child = exec(util.format('/opt/cluster-controller/update.sh %s %s', group, war));
+
+    child.stdout.on('data', function (data) {
+      console.log(data);
+    });
+
+    child.stderr.on('data', function (data) {
+      console.error(data);
+    });
+
+    child.on('close', function (code) {
+      if (code == 0) {
+        setGroupUp(group);
+
+        var timeout = setTimeout(() => {
+          console.log(util.format('Left group %s down because of timeout', group));
+          watcher.clearUpCallbacks(group);
+          callback();
+        }, 1000 * 60 * 10);
+
+        watcher.waitUntilUp(group, () => {
+          console.log(util.format('successfully updated war %s group %s', war, group));
+          clearTimeout(timeout);
+          stopFailsafeServer();
+          callback(null, group);
+        });
+      } else {
+        callback('Update Failed');
+      }
     });
   }
 
@@ -196,6 +260,32 @@
 
     child.on('close', function (code) {
       console.log(code != 0 ? 'Failed to reload nginx configuration.' : 'Nginx reloaded successfully');
+    });
+  }
+
+  function updateGroups(war) {
+    var status = statusUtils.loadStatus(config.statusPath);
+    var groups = Object.keys(status.groups);
+    
+    var failsafeHost = getFailsafeHost();
+    if (failsafeHost) {
+      _.remove(groups, (g) => { return g == failsafeHost.group; });
+    }
+    
+    async.each(groups, shutdownGroup, (err) => {
+      if(err) {
+        console.error(util.format('Error shutting down servers: %s', err));
+      } else {
+        for (let i = 0; i < groups.length; i++) {
+          updateGroup(groups[i], war, (err, updatedGroup) => {
+            if(err) {
+              console.log(util.format('WARNING Updated failed group: %s %s', updatedGroup, err));
+            } else {
+              console.log(util.format('successfully updated group: %s', updatedGroup)); 
+            }
+          });
+        } 
+      }
     });
   }
 
@@ -220,14 +310,17 @@
   });
 
   app.get('/health', (req, res) => {
-    var totalHosts = config.hosts.length;
+    var hosts = _.filter(config.hosts, (host) => { return host.type !== FAILSAFE_TYPE; });
+    var totalHosts = hosts.length;
     var hostsDown = 0;
     var status = statusUtils.loadStatus(config.statusPath);
+    
     for (let i = 0; i < totalHosts; i++) {
-      if (status.hosts[config.hosts[i].url] == 'DOWN') {
+      if (status.hosts[hosts[i].url] == 'DOWN') {
         hostsDown++;
       }
     }
+    
     if (hostsDown == 0) {
       res.send(util.format('OK: %s / %s hosts up.', (totalHosts - hostsDown), totalHosts));
     } else {
@@ -238,6 +331,7 @@
         res.send(util.format('WARNING: %s / %s hosts up.', (totalHosts - hostsDown), totalHosts));
       }
     }
+    
   });
 
   app.get('/group/:group/down', (req, res) => {
@@ -275,34 +369,36 @@
 
   app.get('/cluster/update/:war', (req, res) => {
     var war = req.params.war;
-    var status = statusUtils.loadStatus(config.statusPath);
-    var groups = Object.keys(status.groups);
-    groups.sort(createCompareShutdownPriorities());
-    var firstGroup = groups.shift();
-    updateGroup(firstGroup, war, (err, updatedGroup) => {
-      if (err) {
-        console.error('Update Failed');
-      } else {
-        console.log(util.format('successfully updated group: %s', updatedGroup));
-        for (let i = 0; i < groups.length; i++) {
-          updateGroup(groups[i], war, (err, updatedGroup) => {
-            console.log(util.format('successfully updated group: %s', updatedGroup));
-          });
-        }
-      }
-    });
+    
+    var failsafeHost = getFailsafeHost();
+    if(!failsafeHost) {
+      console.log('WARNING! Failsafe host not configured, updating without failsafe.');
+      updateGroups(war);
+    } else {
+      startFailsafeServer(war);
+      var timeout = setTimeout(() => {
+        console.log('WARNING! Failsafe host was not able to start, skipping update.');
+        watcher.clearUpCallbacks(failsafeHost.group);
+      }, 1000 * 60 * 10);
 
+      watcher.waitUntilUp(failsafeHost.group, () => {
+        console.log('Failsafe server up');
+        clearTimeout(timeout);
+        updateGroups(war);
+      });
+    }
+    
     res.send('ok');
   });
 
   watcher.on('host-up', (host) => {
     console.log(util.format('Host %s from group %s went UP', host.url, host.group));
-    updateConfig();
+    updateConfig(); 
   });
 
   watcher.on('host-down', (host) => {
     console.log(util.format('Host %s from group %s went DOWN', host.url, host.group));
-    updateConfig();
+    updateConfig(); 
   });
 
   watcher.on('group-up', (group) => {
