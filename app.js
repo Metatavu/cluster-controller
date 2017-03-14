@@ -151,8 +151,9 @@
           request(options, (error, response, body) => {});
         }
       }
-      callback();
     }
+    
+    callback();
   }
 
 
@@ -191,9 +192,9 @@
     });
   }
 
-  function updateGroup(group, war, callback) {
+  function shutdownGroup(group, callback) {
     prepareForShutdown(group, () => {
-      var child = exec(util.format('/opt/cluster-controller/update.sh %s %s', group, war));
+      var child = exec(util.format('/opt/cluster-controller/shutdown.sh %s', group));
 
       child.stdout.on('data', function (data) {
         console.log(data);
@@ -205,24 +206,44 @@
 
       child.on('close', function (code) {
         if (code == 0) {
-          setGroupUp(group);
-          
-          var timeout = setTimeout(() => {
-            console.log(util.format('Left group %s down because of timeout', group));
-            watcher.clearUpCallbacks(group);
-            callback();
-          }, 1000 * 60 * 10);
-
-          watcher.waitUntilUp(group, () => {
-            console.log(util.format('successfully updated war %s group %s', war, group));
-            clearTimeout(timeout);
-            stopFailsafeServer();
-            callback(null, group);
-          });
+          callback();
         } else {
-          callback('Update Failed');
+          callback(util.format('Error code: %s', code));
         }
       });
+    });
+  }
+
+  function updateGroup(group, war, callback) {
+    var child = exec(util.format('/opt/cluster-controller/update.sh %s %s', group, war));
+
+    child.stdout.on('data', function (data) {
+      console.log(data);
+    });
+
+    child.stderr.on('data', function (data) {
+      console.error(data);
+    });
+
+    child.on('close', function (code) {
+      if (code == 0) {
+        setGroupUp(group);
+
+        var timeout = setTimeout(() => {
+          console.log(util.format('Left group %s down because of timeout', group));
+          watcher.clearUpCallbacks(group);
+          callback();
+        }, 1000 * 60 * 10);
+
+        watcher.waitUntilUp(group, () => {
+          console.log(util.format('successfully updated war %s group %s', war, group));
+          clearTimeout(timeout);
+          stopFailsafeServer();
+          callback(null, group);
+        });
+      } else {
+        callback('Update Failed');
+      }
     });
   }
 
@@ -251,17 +272,21 @@
       _.remove(groups, (g) => { return g == failsafeHost.group; });
     }
     
-    groups.sort(createCompareShutdownPriorities());
-    
-    for (let i = 0; i < groups.length; i++) {
-      updateGroup(groups[i], war, (err, updatedGroup) => {
-        if(err) {
-          console.log(util.format('WARNING Updated failed group: %s %s', updatedGroup, err));
-        } else {
-          console.log(util.format('successfully updated group: %s', updatedGroup)); 
-        }
-      });
-    }
+    async.each(groups, shutdownGroup, (err) => {
+      if(err) {
+        console.error(util.format('Error shutting down servers: %s', err));
+      } else {
+        for (let i = 0; i < groups.length; i++) {
+          updateGroup(groups[i], war, (err, updatedGroup) => {
+            if(err) {
+              console.log(util.format('WARNING Updated failed group: %s %s', updatedGroup, err));
+            } else {
+              console.log(util.format('successfully updated group: %s', updatedGroup)); 
+            }
+          });
+        } 
+      }
+    });
   }
 
   init();
