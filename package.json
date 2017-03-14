@@ -1,9 +1,10 @@
 {
   "name": "cluster-controller",
-  "version": "0.0.6",
+  "version": "0.1.2",
   "description": "",
   "main": "app.js",
   "scripts": {
+    "start": "node app.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {
@@ -17,8 +18,12 @@
   },
   "homepage": "https://github.com/otavanopisto/cluster-controller#readme",
   "dependencies": {
+    "async": "^2.1.4",
     "express": "^4.14.0",
+    "fs-extra": "2.0.0",
+    "lodash": "4.17.4",
     "mustache": "^2.2.1",
-    "request": "^2.76.0"
+    "request": "^2.80.0",
+    "socket.io-client": "^1.7.2"
   }
 }

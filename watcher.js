@@ -1,21 +1,23 @@
-"use strict";
-
+/*jshint esversion: 6 */
 (function() {
+'use strict';
 
-  var events = require('events');
-  var util = require('util');
-  var request = require('request');
-  var statusUtils = require('./statusUtils');
+  const events = require('events');
+  const util = require('util');
+  const request = require('request');
+  const statusUtils = require('./statusUtils');
 
   class Watcher extends events.EventEmitter {
     constructor(config) {
       super();
       this.hosts = config.hosts;
       this.manuallyDown = [];
+      this.onGroupUp = {};
       this.checkPath = config.checkPath;
       this.statusPath = config.statusPath;
       this.interval = config.checkInterval || 1000;
-      this.timeout = config.timeout || 1000;
+      this.timeout = config.timeout || 10000;
+      this.waitAfterUp = config.waitAfterUp || 10000;
       this.index = 0;
     }
     start() {
@@ -31,6 +33,16 @@
       this.manuallyDown.push(host.url);
       this.handleHostDown(host);
     }
+    waitUntilUp(group, callback) {
+      if(!this.onGroupUp[group]) {
+        this.onGroupUp[group] = [callback];
+      } else {
+        this.onGroupUp[group].push(callback)
+      }
+    }
+    clearUpCallbacks(group) {
+      this.onGroupUp[group] = [];
+    }
     handleHostUp(host) {
       var status = statusUtils.loadStatus(this.statusPath);
       if (status.hosts[host.url] == 'DOWN') {
@@ -40,10 +52,13 @@
           status.groups[host.group] = 'UP'
         }
         statusUtils.saveStatus(this.statusPath, status);
-        this.emit('host-up', host);
-        if (groupUp) {
-          this.emit('group-up', host.group);
-        }
+        
+        setTimeout(() => {
+          this.emit('host-up', host);
+          if (groupUp) {
+            this.emit('group-up', host.group);
+          }
+        }, this.waitAfterUp);
       }
     }
     handleHostDown(host) {
@@ -81,6 +96,27 @@
           this.index++;
           setTimeout(() => this.checkHost(), this.interval);
         });
+      }
+
+      this.updateGroups();
+    }
+    updateGroups() {
+      var status = statusUtils.loadStatus(this.statusPath);
+      for (let i = 0; i < this.hosts.length; i++) {
+        let host = this.hosts[i];
+        if (status.groups[host.group] == 'UP') {
+          setTimeout(() => {
+            this.runUpCallbacks(host.group);
+          }, this.waitAfterUp);
+        }
+      }
+    }
+    runUpCallbacks(group) {
+      if(this.onGroupUp[group]) {
+        for(let i = 0; i < this.onGroupUp[group].length; i++) {
+          this.onGroupUp[group][i]();
+        }
+        this.onGroupUp[group] = [];
       }
     }
     checkGroup(group, status) {

@@ -4,3 +4,4 @@ config.js
 /.settings/
 /.tern-project
 /.project
+/nbproject/private/
