@@ -393,6 +393,32 @@
     res.send('ok');
   });
 
+  app.get('/cluster/failsafe/start/:war', (req, res) => {
+    var war = req.params.war;
+    
+    var failsafeHost = getFailsafeHost();
+    if(!failsafeHost) {
+      console.log('ERROR! Failsafe host not configured, cannot start failsafe server.');
+    } else {
+      startFailsafeServer(war);
+      var timeout = setTimeout(() => {
+        console.log('WARNING! Failsafe host was not able to start, skipping update.');
+      }, 1000 * 60 * 10);
+      
+      watcher.waitUntilUp(failsafeHost.group, () => {
+        console.log('Failsafe server up');
+        clearTimeout(timeout);
+      });
+    }
+    
+    res.send('ok');
+  });
+  
+  app.get('/cluster/failsafe/stop', (req, res) => {
+    stopFailsafeServer();
+    res.send('ok');
+  });
+
   app.get('/cluster/update/:war', (req, res) => {
     var war = req.params.war;
     
