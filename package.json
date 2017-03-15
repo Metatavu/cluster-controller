@@ -1,6 +1,6 @@
 {
   "name": "cluster-controller",
-  "version": "0.1.2",
+  "version": "0.1.3-alpha",
   "description": "",
   "main": "app.js",
   "scripts": {
