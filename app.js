@@ -292,18 +292,18 @@
       _.remove(groups, (g) => { return g == failsafeHost.group; });
     }
     
-    async.each(groups, shutdownGroup, (err) => {
-      if (err) {
-        console.error(util.format('Error shutting down servers: %s', err));
+    async.each(groups, shutdownGroup, (shutdownErr) => {
+      if (shutdownErr) {
+        console.error(util.format('Error shutting down servers: %s', shutdownErr));
       } else {
-        prepareForUpdate(war, (err) => {
-          if (err) {
-            console.error(util.format('Error preparing for update: %s', err));
+        prepareForUpdate(war, (prepareErr) => {
+          if (prepareErr) {
+            console.error(util.format('Error preparing for update: %s', prepareErr));
           } else {
             for (let i = 0; i < groups.length; i++) {
-              updateGroup(groups[i], war, (err, updatedGroup) => {
-                if(err) {
-                  console.log(util.format('WARNING Updated failed group: %s %s', updatedGroup, err));
+              updateGroup(groups[i], war, (updateErr, updatedGroup) => {
+                if (updateErr) {
+                  console.log(util.format('WARNING Updated failed group: %s %s', updatedGroup, updateErr));
                 } else {
                   console.log(util.format('successfully updated group: %s', updatedGroup)); 
                 }
