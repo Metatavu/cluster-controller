@@ -263,6 +263,26 @@
     });
   }
 
+  function prepareForUpdate(war, callback) {
+    var child = exec(util.format('/opt/cluster-controller/prepare_update.sh %s', war));
+
+    child.stdout.on('data', function (data) {
+      console.log(data);
+    });
+
+    child.stderr.on('data', function (data) {
+      console.error(data);
+    });
+
+    child.on('close', function (code) {
+      if (code == 0) {
+        callback();
+      } else {
+        callback(util.format('Error code: %s', code));
+      }
+    });
+  }
+
   function updateGroups(war) {
     var status = statusUtils.loadStatus(config.statusPath);
     var groups = Object.keys(status.groups);
@@ -273,18 +293,24 @@
     }
     
     async.each(groups, shutdownGroup, (err) => {
-      if(err) {
+      if (err) {
         console.error(util.format('Error shutting down servers: %s', err));
       } else {
-        for (let i = 0; i < groups.length; i++) {
-          updateGroup(groups[i], war, (err, updatedGroup) => {
-            if(err) {
-              console.log(util.format('WARNING Updated failed group: %s %s', updatedGroup, err));
-            } else {
-              console.log(util.format('successfully updated group: %s', updatedGroup)); 
-            }
-          });
-        } 
+        prepareForUpdate(war, (err) => {
+          if (err) {
+            console.error(util.format('Error preparing for update: %s', err));
+          } else {
+            for (let i = 0; i < groups.length; i++) {
+              updateGroup(groups[i], war, (err, updatedGroup) => {
+                if(err) {
+                  console.log(util.format('WARNING Updated failed group: %s %s', updatedGroup, err));
+                } else {
+                  console.log(util.format('successfully updated group: %s', updatedGroup)); 
+                }
+              });
+            } 
+          }
+        });
       }
     });
   }
