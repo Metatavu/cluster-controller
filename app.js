@@ -264,7 +264,7 @@
   }
 
   function prepareForUpdate(war, callback) {
-    var child = exec(util.format('/opt/cluster-controller/prepare_update.sh %s', war));
+    var child = exec(util.format('/opt/cluster-controller/prepare-update.sh %s', war));
 
     child.stdout.on('data', function (data) {
       console.log(data);
