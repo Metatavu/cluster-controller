@@ -5,6 +5,7 @@
   const events = require('events');
   const util = require('util');
   const request = require('request');
+  const _ = require('lodash');
   const statusUtils = require('./statusUtils');
 
   class Watcher extends events.EventEmitter {
@@ -24,10 +25,7 @@
       this.checkHost();
     }
     setUp(host) {
-      var index = this.manuallyDown.indexOf(host.url);
-      if(index > -1) {
-        this.manuallyDown.splice(index, 1);
-      }
+      _.remove(this.manuallyDown, (url) => { return url == host.url; });
     }
     setDown(host) {
       this.manuallyDown.push(host.url);

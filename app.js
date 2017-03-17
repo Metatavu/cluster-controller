@@ -263,6 +263,26 @@
     });
   }
 
+  function prepareForUpdate(war, callback) {
+    var child = exec(util.format('/opt/cluster-controller/prepare-update.sh %s', war));
+
+    child.stdout.on('data', function (data) {
+      console.log(data);
+    });
+
+    child.stderr.on('data', function (data) {
+      console.error(data);
+    });
+
+    child.on('close', function (code) {
+      if (code == 0) {
+        callback();
+      } else {
+        callback(util.format('Error code: %s', code));
+      }
+    });
+  }
+
   function updateGroups(war) {
     var status = statusUtils.loadStatus(config.statusPath);
     var groups = Object.keys(status.groups);
@@ -272,19 +292,25 @@
       _.remove(groups, (g) => { return g == failsafeHost.group; });
     }
     
-    async.each(groups, shutdownGroup, (err) => {
-      if(err) {
-        console.error(util.format('Error shutting down servers: %s', err));
+    async.each(groups, shutdownGroup, (shutdownErr) => {
+      if (shutdownErr) {
+        console.error(util.format('Error shutting down servers: %s', shutdownErr));
       } else {
-        for (let i = 0; i < groups.length; i++) {
-          updateGroup(groups[i], war, (err, updatedGroup) => {
-            if(err) {
-              console.log(util.format('WARNING Updated failed group: %s %s', updatedGroup, err));
-            } else {
-              console.log(util.format('successfully updated group: %s', updatedGroup)); 
-            }
-          });
-        } 
+        prepareForUpdate(war, (prepareErr) => {
+          if (prepareErr) {
+            console.error(util.format('Error preparing for update: %s', prepareErr));
+          } else {
+            for (let i = 0; i < groups.length; i++) {
+              updateGroup(groups[i], war, (updateErr, updatedGroup) => {
+                if (updateErr) {
+                  console.log(util.format('WARNING Updated failed group: %s %s', updatedGroup, updateErr));
+                } else {
+                  console.log(util.format('successfully updated group: %s', updatedGroup)); 
+                }
+              });
+            } 
+          }
+        });
       }
     });
   }
@@ -364,6 +390,32 @@
       restartQueue.push(groups[i]);
     }
 
+    res.send('ok');
+  });
+
+  app.get('/cluster/failsafe/start/:war', (req, res) => {
+    var war = req.params.war;
+    
+    var failsafeHost = getFailsafeHost();
+    if(!failsafeHost) {
+      console.log('ERROR! Failsafe host not configured, cannot start failsafe server.');
+    } else {
+      startFailsafeServer(war);
+      var timeout = setTimeout(() => {
+        console.log('WARNING! Failsafe host was not able to start, skipping update.');
+      }, 1000 * 60 * 10);
+      
+      watcher.waitUntilUp(failsafeHost.group, () => {
+        console.log('Failsafe server up');
+        clearTimeout(timeout);
+      });
+    }
+    
+    res.send('ok');
+  });
+  
+  app.get('/cluster/failsafe/stop', (req, res) => {
+    stopFailsafeServer();
     res.send('ok');
   });
 
