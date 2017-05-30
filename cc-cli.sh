@@ -86,6 +86,7 @@ case "$1" in
     
     group_down failsafe
     cluster_fail_safe_stop
+    group_up failsafe
   ;;
   cluster-update-war)
     if [ "$#" -ne 2 ]; then
