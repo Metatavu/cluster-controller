@@ -9,6 +9,7 @@
   const statusUtils = require('./statusUtils');
 
   class Watcher extends events.EventEmitter {
+
     constructor(config) {
       super();
       this.hosts = config.hosts;
@@ -18,19 +19,24 @@
       this.statusPath = config.statusPath;
       this.interval = config.checkInterval || 1000;
       this.timeout = config.timeout || 10000;
+      this.lastHostTimeout = config.lastHostTimeout || 60000;
       this.waitAfterUp = config.waitAfterUp || 10000;
       this.index = 0;
     }
+
     start() {
       this.checkHost();
     }
+
     setUp(host) {
       _.remove(this.manuallyDown, (url) => { return url == host.url; });
     }
+
     setDown(host) {
       this.manuallyDown.push(host.url);
       this.handleHostDown(host);
     }
+
     waitUntilUp(group, callback) {
       if(!this.onGroupUp[group]) {
         this.onGroupUp[group] = [callback];
@@ -38,9 +44,11 @@
         this.onGroupUp[group].push(callback)
       }
     }
+
     clearUpCallbacks(group) {
       this.onGroupUp[group] = [];
     }
+
     handleHostUp(host) {
       var status = statusUtils.loadStatus(this.statusPath);
       if (status.hosts[host.url] == 'DOWN') {
@@ -59,6 +67,7 @@
         }, this.waitAfterUp);
       }
     }
+
     handleHostDown(host) {
       var status = statusUtils.loadStatus(this.statusPath);
       if (status.hosts[host.url] == 'UP') {
@@ -72,13 +81,14 @@
         }
       }
     }
+
     checkHost() {
       this.index = this.index % this.hosts.length;
       var host = this.hosts[this.index];
       var options = {
         url: util.format('%s://%s%s', host.protocol, host.url, this.checkPath),
         headers: host.headers,
-        timeout: this.timeout
+        timeout: this.isLastHostUp(host) ? this.lastHostTimeout : this.timeout
       };
       if (this.manuallyDown.indexOf(host.url) > -1) {
         this.handleHostDown(host);
@@ -98,6 +108,22 @@
 
       this.updateGroups();
     }
+
+    isLastHostUp(host) {
+      const status = statusUtils.loadStatus(this.statusPath);
+      if (status.hosts[host.url] === 'DOWN') {
+        return false;
+      }
+      for (var i = 0; i < this.hosts.length; i++) {
+        let anotherHost = this.hosts[i];
+        if (host.url !== anotherHost.url && status.hosts[anotherHost.url] === 'UP') {
+          return false;
+        }
+      }
+      
+      return true;
+    }
+
     updateGroups() {
       var status = statusUtils.loadStatus(this.statusPath);
       for (let i = 0; i < this.hosts.length; i++) {
@@ -109,6 +135,7 @@
         }
       }
     }
+
     runUpCallbacks(group) {
       if(this.onGroupUp[group]) {
         for(let i = 0; i < this.onGroupUp[group].length; i++) {
@@ -117,6 +144,7 @@
         this.onGroupUp[group] = [];
       }
     }
+
     checkGroup(group, status) {
       for (var i = 0; i < this.hosts.length; i++) {
         var host = this.hosts[i];

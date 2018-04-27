@@ -317,18 +317,6 @@
 
   init();
 
-  //var socket = require('socket.io-client')(config.metadog);
-
-  /*socket.on('server:critical', (data) => {
-    var server = data.server;
-    for (var i = 0; i < config.hosts.length; i++) {
-      var host = config.hosts[i];
-      if (host.name == server) {
-        restartGroup.push(host.group);
-      }
-    }
-  });*/
-
   app.set('port', config.port);
 
   app.get('/status', (req, res) => {
