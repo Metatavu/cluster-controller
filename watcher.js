@@ -109,12 +109,19 @@
       this.updateGroups();
     }
 
+    /**
+     * Checks if host is the last one up in cluster
+     * 
+     * @param {Object} host host object
+     * @returns {Boolean} returns true if the host is last one up in the cluster, false otherwise
+     */
     isLastHostUp(host) {
       const status = statusUtils.loadStatus(this.statusPath);
       if (status.hosts[host.url] === 'DOWN') {
         return false;
       }
-      for (var i = 0; i < this.hosts.length; i++) {
+ 
+      for (let i = 0; i < this.hosts.length; i++) {
         let anotherHost = this.hosts[i];
         if (host.url !== anotherHost.url && status.hosts[anotherHost.url] === 'UP') {
           return false;
