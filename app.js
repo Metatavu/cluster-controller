@@ -1,12 +1,14 @@
 /*jshint esversion: 6 */
 (function () {
   'use strict';
-
+  
+  const config = require("nconf");
+  config.file("config.json");
+  
   const express = require('express');
   const app = express();
   const request = require('request');
   const statusUtils = require('./statusUtils');
-  const config = require('./config');
   const util = require('util');
   const async = require('async');
   const mustache = require('mustache');
@@ -16,6 +18,7 @@
   const Watcher = require('./watcher');
   const watcher = new Watcher(config);
   const _ = require('lodash');
+  
   const restartQueue = async.queue((group, callback) => {
     restartGroup(group, callback);
   }, 1);
@@ -29,19 +32,19 @@
       groups: {},
       hosts: {}
     };
-    for (let i = 0; i < config.hosts.length; i++) {
-      var host = config.hosts[i];
+    for (let i = 0; i < config.get("hosts").length; i++) {
+      var host = config.get("hosts")[i];
       initialStatus.hosts[host.url] = 'UP';
       if (typeof (initialStatus.groups[host.group]) == 'undefined') {
         initialStatus.groups[host.group] = 'UP';
       }
     }
-    statusUtils.saveStatus(config.statusPath, initialStatus);
+    statusUtils.saveStatus(config.get("statusPath"), initialStatus);
   }
 
   function setGroupUp(group) {
-    for (let i = 0; i < config.hosts.length; i++) {
-      var host = config.hosts[i];
+    for (let i = 0; i < config.get("hosts").length; i++) {
+      var host = config.get("hosts")[i];
       if (group == host.group) {
         watcher.setUp(host);
         console.log(util.format('Forced host %s up', host.url));
@@ -50,8 +53,8 @@
   }
 
   function setGroupDown(group) {
-    for (let i = 0; i < config.hosts.length; i++) {
-      var host = config.hosts[i];
+    for (let i = 0; i < config.get("hosts").length; i++) {
+      var host = config.get("hosts")[i];
       if (group == host.group) {
         watcher.setDown(host);
         console.log(util.format('Forced host %s down', host.url));
@@ -60,11 +63,11 @@
   }
 
   function updateConfig() {
-    var template = fs.readFileSync(config.upstreamTemplate, 'utf8');
-    var status = statusUtils.loadStatus(config.statusPath);
+    var template = fs.readFileSync(config.get("upstreamTemplate"), 'utf8');
+    var status = statusUtils.loadStatus(config.get("statusPath"));
     var hostList = [];
-    for (var i = 0; i < config.hosts.length; i++) {
-      var host = config.hosts[i];
+    for (var i = 0; i < config.get("hosts").length; i++) {
+      var host = config.get("hosts")[i];
       if (status.hosts[host.url] == 'UP') {
         hostList.push(host.url);
       } else {
@@ -72,12 +75,12 @@
       }
     }
     var upstream = mustache.render(template, { hosts: hostList });
-    fs.writeFileSync(config.nginxConfigPath, upstream);
+    fs.writeFileSync(config.get("nginxConfigPath"), upstream);
     reloadNginx();
   }
 
   function createCompareShutdownPriorities() {
-    var status = statusUtils.loadStatus(config.statusPath);
+    var status = statusUtils.loadStatus(config.get("statusPath"));
 
     return function (group1, group2) {
       if (status.groups[group1] == 'DOWN') {
@@ -92,8 +95,8 @@
 
   function getHostsByGroup(group) {
     var hosts = [];
-    for (let i = 0; i < config.hosts.length; i++) {
-      var host = config.hosts[i];
+    for (let i = 0; i < config.get("hosts").length; i++) {
+      var host = config.get("hosts")[i];
       if (host.group == group) {
         hosts.push(host);
       }
@@ -103,8 +106,8 @@
   }
 
   function getFailsafeHost() {
-    for (let i = 0; i < config.hosts.length; i++) {
-      var host = config.hosts[i];
+    for (let i = 0; i < config.get("hosts").length; i++) {
+      var host = config.get("hosts")[i];
       if (host.type == FAILSAFE_TYPE) {
         return host;
       }
@@ -137,10 +140,10 @@
 
   function prepareForShutdown(group, callback) {
     setGroupDown(group);
-    if (config.hooks && config.hooks.beforeShutdown) {
+    if (config.get("hooks") && config.get("hooks").beforeShutdown) {
       var hosts = getHostsByGroup(group);
-      for (let i = 0; i < config.hooks.beforeShutdown.length; i++) {
-        var beforeShutdownHook = config.hooks.beforeShutdown[i];
+      for (let i = 0; i < config.get("hooks").beforeShutdown.length; i++) {
+        var beforeShutdownHook = config.get("hooks").beforeShutdown[i];
         for (let j = 0; j < hosts.length; j++) {
           var host = hosts[j];
           var options = {
@@ -191,63 +194,46 @@
       });
     });
   }
+  
+  function executeScript(script, params) {
+    if (!script) {
+      return;
+    }
 
-  function shutdownGroup(group, callback) {
-    prepareForShutdown(group, () => {
-      var child = exec(util.format('/opt/cluster-controller/shutdown.sh %s', group));
+    return new Promise((resolve, reject) => {
+      const escapedParams = params.map((param) => {
+        return `'${param}'`;
+      });
 
-      child.stdout.on('data', function (data) {
+      const command = `${script} ${escapedParams ? escapedParams.join(' ') : ''}`;
+      const child = exec(command);
+  
+      child.stdout.on('data', (data) => {
         console.log(data);
       });
-
-      child.stderr.on('data', function (data) {
+  
+      child.stderr.on('data', (data) => {
         console.error(data);
       });
-
-      child.on('close', function (code) {
-        if (code == 0) {
-          callback();
+  
+      child.on('close', (code) => {
+        if (code === 0) {
+          resolve();
         } else {
-          callback(util.format('Error code: %s', code));
+          reject(`Process failed with code ${code}`);
         }
       });
     });
   }
 
-  function updateGroup(group, war, callback) {
-    var child = exec(util.format('/opt/cluster-controller/update.sh %s %s', group, war));
-
-    child.stdout.on('data', function (data) {
-      console.log(data);
-    });
-
-    child.stderr.on('data', function (data) {
-      console.error(data);
-    });
-
-    child.on('close', function (code) {
-      if (code == 0) {
-        setGroupUp(group);
-
-        var timeout = setTimeout(() => {
-          console.log(util.format('Left group %s down because of timeout', group));
-          watcher.clearUpCallbacks(group);
-          callback();
-        }, 1000 * 60 * 10);
-
-        watcher.waitUntilUp(group, () => {
-          console.log(util.format('successfully updated war %s group %s', war, group));
-          clearTimeout(timeout);
-          stopFailsafeServer();
-          callback(null, group);
-        });
-      } else {
-        callback('Update Failed');
-      }
-    });
-  }
-
   function reloadNginx() {
+    const skipReload = config.get("test") === true;
+    
+    if (skipReload) {
+      console.log('Service in TEST mode, skipping nginx reload');
+      return;
+    }
+    
     var child = exec('service nginx reload');
 
     child.stdout.on('data', function (data) {
@@ -262,72 +248,34 @@
       console.log(code != 0 ? 'Failed to reload nginx configuration.' : 'Nginx reloaded successfully');
     });
   }
+  
+  async function updateGroups(version) {
+    const status = statusUtils.loadStatus(config.get("statusPath"));
+    const groups = Object.keys(status.groups);
+    const failsafeHost = getFailsafeHost();
+    const normalGroups = groups.filter((group) => {
+      return !failsafeHost || group !== failsafeHost.group;
+    }).join(" ");
 
-  function prepareForUpdate(war, callback) {
-    var child = exec(util.format('/opt/cluster-controller/prepare-update.sh %s', war));
-
-    child.stdout.on('data', function (data) {
-      console.log(data);
-    });
-
-    child.stderr.on('data', function (data) {
-      console.error(data);
-    });
-
-    child.on('close', function (code) {
-      if (code == 0) {
-        callback();
-      } else {
-        callback(util.format('Error code: %s', code));
-      }
-    });
-  }
-
-  function updateGroups(war) {
-    var status = statusUtils.loadStatus(config.statusPath);
-    var groups = Object.keys(status.groups);
-    
-    var failsafeHost = getFailsafeHost();
-    if (failsafeHost) {
-      _.remove(groups, (g) => { return g == failsafeHost.group; });
-    }
-    
-    async.each(groups, shutdownGroup, (shutdownErr) => {
-      if (shutdownErr) {
-        console.error(util.format('Error shutting down servers: %s', shutdownErr));
-      } else {
-        prepareForUpdate(war, (prepareErr) => {
-          if (prepareErr) {
-            console.error(util.format('Error preparing for update: %s', prepareErr));
-          } else {
-            for (let i = 0; i < groups.length; i++) {
-              updateGroup(groups[i], war, (updateErr, updatedGroup) => {
-                if (updateErr) {
-                  console.log(util.format('WARNING Updated failed group: %s %s', updatedGroup, updateErr));
-                } else {
-                  console.log(util.format('successfully updated group: %s', updatedGroup)); 
-                }
-              });
-            } 
-          }
-        });
-      }
-    });
+    await executeScript(config.get("scripts:shutdown"), [ normalGroups, version ]);
+    await executeScript(config.get("scripts:prepare-update"), [ normalGroups, version ]);
+    await executeScript(config.get("scripts:update"), [ normalGroups, version ]);
+    await executeScript(config.get("scripts:finalize-update"), [ normalGroups, version ]);
   }
 
   init();
 
-  app.set('port', config.port);
+  app.set('port', config.get("port"));
 
   app.get('/status', (req, res) => {
-    res.send(statusUtils.loadStatus(config.statusPath));
+    res.send(statusUtils.loadStatus(config.get("statusPath")));
   });
 
   app.get('/health', (req, res) => {
-    var hosts = _.filter(config.hosts, (host) => { return host.type !== FAILSAFE_TYPE; });
+    var hosts = _.filter(config.get("hosts"), (host) => { return host.type !== FAILSAFE_TYPE; });
     var totalHosts = hosts.length;
     var hostsDown = 0;
-    var status = statusUtils.loadStatus(config.statusPath);
+    var status = statusUtils.loadStatus(config.get("statusPath"));
     
     for (let i = 0; i < totalHosts; i++) {
       if (status.hosts[hosts[i].url] == 'DOWN') {
@@ -339,7 +287,7 @@
       res.send(util.format('OK: %s / %s hosts up.', (totalHosts - hostsDown), totalHosts));
     } else {
       var percentDown = hostsDown / totalHosts;
-      if (percentDown >= config.criticalTreshold) {
+      if (percentDown >= config.get("criticalTreshold")) {
         res.send(util.format('CRITICAL: %s / %s hosts up.', (totalHosts - hostsDown), totalHosts));
       } else {
         res.send(util.format('WARNING: %s / %s hosts up.', (totalHosts - hostsDown), totalHosts));
@@ -350,7 +298,7 @@
 
   app.get('/group/:group/down', (req, res) => {
     var group = req.params.group;
-    var status = statusUtils.loadStatus(config.statusPath);
+    var status = statusUtils.loadStatus(config.get("statusPath"));
     if (typeof (status.groups[group]) == 'undefined') {
       res.status(404).send();
     } else {
@@ -361,7 +309,7 @@
 
   app.get('/group/:group/up', (req, res) => {
     var group = req.params.group;
-    var status = statusUtils.loadStatus(config.statusPath);
+    var status = statusUtils.loadStatus(config.get("statusPath"));
     if (typeof (status.groups[group]) == 'undefined') {
       res.status(404).send();
     } else {
@@ -371,7 +319,7 @@
   });
 
   app.get('/cluster/restart', (req, res) => {
-    var status = statusUtils.loadStatus(config.statusPath);
+    var status = statusUtils.loadStatus(config.get("statusPath"));
     var groups = Object.keys(status.groups);
     groups.sort(createCompareShutdownPriorities());
     for (let i = 0; i < groups.length; i++) {
@@ -453,8 +401,8 @@
 
   var http = require('http').Server(app);
 
-  http.listen(config.port, function () {
-    console.log(util.format('Listening to %s', config.port));
+  http.listen(config.get("port"), function () {
+    console.log(util.format('Listening to %s', config.get("port")));
   });
 
 })();
