@@ -2,6 +2,7 @@
 (function() {
 'use strict';
 
+  const config = require("nconf");
   const events = require('events');
   const util = require('util');
   const request = require('request');
@@ -10,17 +11,17 @@
 
   class Watcher extends events.EventEmitter {
 
-    constructor(config) {
+    constructor() {
       super();
-      this.hosts = config.hosts;
+      this.hosts = config.get("hosts");
       this.manuallyDown = [];
       this.onGroupUp = {};
-      this.checkPath = config.checkPath;
-      this.statusPath = config.statusPath;
-      this.interval = config.checkInterval || 1000;
-      this.timeout = config.timeout || 10000;
-      this.lastHostTimeout = config.lastHostTimeout || 60000;
-      this.waitAfterUp = config.waitAfterUp || 10000;
+      this.checkPath = config.get("checkPath");
+      this.statusPath = config.get("statusPath");
+      this.interval = config.get("checkInterval") || 1000;
+      this.timeout = config.get("timeout") || 10000;
+      this.lastHostTimeout = config.get("lastHostTimeout") || 60000;
+      this.waitAfterUp = config.get("waitAfterUp") || 10000;
       this.index = 0;
     }
 
