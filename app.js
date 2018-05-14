@@ -3,7 +3,7 @@
   'use strict';
   
   const config = require("nconf");
-  config.file("config.json");
+  config.file(`${__dirname}/config.json`);
   
   const express = require('express');
   const app = express();
