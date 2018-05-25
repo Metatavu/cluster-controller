@@ -255,12 +255,27 @@
     const failsafeHost = getFailsafeHost();
     const normalGroups = groups.filter((group) => {
       return !failsafeHost || group !== failsafeHost.group;
-    }).join(" ");
+    });
 
-    await executeScript(config.get("scripts:shutdown"), [ normalGroups, version ]);
-    await executeScript(config.get("scripts:prepare-update"), [ normalGroups, version ]);
-    await executeScript(config.get("scripts:update"), [ normalGroups, version ]);
-    await executeScript(config.get("scripts:finalize-update"), [ normalGroups, version ]);
+    normalGroups.forEach((group) => {
+      setGroupDown(group);
+    });
+
+    const normalGroupsParam = normalGroups.join(" ");
+
+    await executeScript(config.get("scripts:shutdown"), [ normalGroupsParam, version ]);
+    await executeScript(config.get("scripts:prepare-update"), [ normalGroupsParam, version ]);
+    await executeScript(config.get("scripts:update"), [ normalGroupsParam, version ]);
+    await executeScript(config.get("scripts:finalize-update"), [ normalGroupsParam, version ]);
+
+    normalGroups.forEach((group) => {
+      setGroupUp(group);
+    });
+
+    await watcher.waitUntilAnyUp(normalGroups);
+
+    console.log(`Successfully updated ${version}`);
+    stopFailsafeServer();
   }
 
   init();
@@ -359,7 +374,7 @@
     var war = req.params.war;
     
     var failsafeHost = getFailsafeHost();
-    if(!failsafeHost) {
+    if (!failsafeHost) {
       console.log('WARNING! Failsafe host not configured, updating without failsafe.');
       updateGroups(war);
     } else {
