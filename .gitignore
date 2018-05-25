@@ -4,4 +4,7 @@ config.js
 /.settings/
 /.tern-project
 /.project
+/test
 /nbproject/private/
+config.json
+status.json

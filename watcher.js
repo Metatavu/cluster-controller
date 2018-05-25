@@ -8,6 +8,7 @@
   const request = require('request');
   const _ = require('lodash');
   const statusUtils = require('./statusUtils');
+  const Promise = require("bluebird");
 
   class Watcher extends events.EventEmitter {
 
@@ -38,12 +39,44 @@
       this.handleHostDown(host);
     }
 
+    /**
+     * Wait until group is up
+     * 
+     * @param {String} group group
+     * @param {callback} callback callback when the group is up (deprecated)
+     * @returns Promise promise for group up
+     */
     waitUntilUp(group, callback) {
-      if(!this.onGroupUp[group]) {
-        this.onGroupUp[group] = [callback];
-      } else {
-        this.onGroupUp[group].push(callback)
-      }
+      return new Promise((resolve, reject) => {
+        const internalCallback = (err) => {
+          if (err) {
+            reject(err);
+          } else {
+            resolve();
+          }
+
+          if (callback) {
+            callback(err);
+          }
+        };
+
+        if (!this.onGroupUp[group]) {
+          this.onGroupUp[group] = [ internalCallback ];
+        } else {
+          this.onGroupUp[group].push(internalCallback)
+        }  
+      });      
+    }
+
+    /**
+     * Waits until any of the groups is up
+     * 
+     * @param {Array} groups groups 
+     */
+    async waitUntilAnyUp(groups) {
+      return Promise.any(groups.map((group) => {
+        return this.waitUntilUp(group);
+      }));
     }
 
     clearUpCallbacks(group) {
