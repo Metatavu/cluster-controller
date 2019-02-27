@@ -133,6 +133,9 @@
   
   function stopFailsafeServer() {
     if (failsafeProcess) {
+      failsafeProcess.stdin.setEncoding('utf-8');
+      failsafeProcess.stdout.pipe(process.stdout);
+      failsafeProcess.stdin.write("exit\n");
       failsafeProcess.kill();
       failsafeProcess = null;
     }
